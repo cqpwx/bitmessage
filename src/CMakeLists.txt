@@ -1,4 +1,10 @@
-aux_source_directory(. SRC_LIST)
-include_directories(../inc)
-add_executable(bitmessage ${SRC_LIST})
+add_executable(bitmessage
+        main.c
+        log.c log.h
+        protocol.c protocol.h
+        inv.c inv.h
+        peer.c peer.h
+        address.c address.h
+        object.c object.c
+        )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
