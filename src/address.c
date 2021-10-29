@@ -261,5 +261,9 @@ void storeToInv(void* ripe, unsigned int ripeLength,
     memcpy(q, signature, signatureLength);
     q += signatureLength;
     //Encryption
-    p += bmUtilsEncrypt(dataBuffer, q - dataBuffer, publicEncryptionKey, publicEncryptionKeyLength, p);
+    p += bmUtilsEncrypt(dataBuffer, q - dataBuffer,
+                        publicEncryptionKey, publicEncryptionKeyLength,
+                        p);
+    //Do POW for this public key message
+
 }
