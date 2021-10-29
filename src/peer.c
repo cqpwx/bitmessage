@@ -473,7 +473,7 @@ void processPacket(struct BMPeer* peer, struct BMHeader* header, void* payload) 
 			memset(inv, 0, BM_INV_SIZE);
 			memcpy(inv, p, BM_INV_SIZE);
 			p += BM_INV_SIZE;
-			if (!bmInvInsertNode(BM_GLOBAL_INV, inv, peer)) {
+			if (!bmInvInsertNodeWithPeer(BM_GLOBAL_INV, inv, peer)) {
 				bmLog(__FUNCTION__, "Failed to insert inv");
 			} 
 		}

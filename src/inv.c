@@ -7,7 +7,8 @@
 
 #include <pthread.h>
 
-#include "protocol.h"
+#include <openssl/evp.h>
+
 #include "log.h"
 
 /*
@@ -46,27 +47,29 @@ struct BMInv* bmInvCreate() {
 }
 
 void bmInvDestory(struct BMInv* inv) {
-	struct BMInvNode* node;
-	struct BMInvNode* next;
-
+    struct BMInvData* data;
 	//Parameter check
 	if (inv == NULL) {
 		bmLog(__FUNCTION__, "Invalid parameter!\n");
 		return;
 	}
 	//Destroy inv data
-	node = inv->data;
-	while (node) {
-		next = node->next;
-		free(node);
-		node = next;
-	}
+    for (data = inv->data; data != NULL; data = data->hh.next) {
+        if (data->data) {
+            if (data->data->payload) {
+                free(data->data->payload);
+            }
+            free(data->data);
+        }
+        HASH_DEL(inv->data, data);
+        free(data);
+    }
 	//Destory inv
 	free(inv);
 }
 
-int bmInvInsertNode(struct BMInv* list, unsigned char* inv, struct BMPeer* peer) {
-	struct BMInvNode* node;
+int bmInvInsertNodeWithPeer(struct BMInv* list, unsigned char* inv, struct BMPeer* peer) {
+    struct BMInvData* data;
 	//Parameter check
 	if (list == NULL || inv == NULL) {
 		bmLog(__FUNCTION__, "Invalid parameter input!\n");
@@ -78,82 +81,122 @@ int bmInvInsertNode(struct BMInv* list, unsigned char* inv, struct BMPeer* peer)
 		return 0;
 	}
 	//Insert
-	if (list->data == NULL) {
-		list->data = (struct BMInvNode*)malloc(sizeof(struct BMInvNode));
-		node = list->data;
-	} else {
-		node = list->data;
-		while (node->next) {
-			node = node->next;
-		}
-		node->next = (struct BMInvNode*)malloc(sizeof(struct BMInvNode));
-		node = node->next;
-	}
-	if (node == NULL) {
-		bmLog(__FUNCTION__, "Failed to malloc\n");
-		return 0;
-	}
-	memset(node, 0, sizeof(struct BMInvNode));
-	memcpy(node->inv, inv, BM_INV_SIZE);
-	node->isNew = 1;
-	node->peer = peer;
-	list->count++;
-	return 1;
+    data = (struct BMInvData*)malloc(sizeof(struct BMInvData));
+    if (data == NULL) {
+        bmLog(__FUNCTION__, "Failed to malloc!");
+        return 0;
+    }
+    memset(data, 0, sizeof(struct BMInvData));
+    data->peer = peer;
+    data->need = 1;
+    memcpy(data->inv, inv, BM_INV_SIZE);
+    HASH_ADD(hh, list->data, inv, BM_INV_SIZE, data);
+    return 1;
+}
+
+int bmInvInsertNodeWithObject(struct BMInv* list, uint8_t* inv, struct BMObject* object) {
+    struct BMInvData* data;
+    //Parameter check
+    if (list == NULL || inv == NULL) {
+        bmLog(__FUNCTION__, "Invalid parameter input!\n");
+        return 0;
+    }
+    //Search if we have that inv
+    if (bmInvSearchNode(list, inv)) {
+        bmLog(__FUNCTION__, "Already in the list,Ignored.");
+        return 0;
+    }
+    //Insert
+    data = (struct BMInvData*)malloc(sizeof(struct BMInvData));
+    if (data == NULL) {
+        bmLog(__FUNCTION__, "Failed to malloc!");
+        return 0;
+    }
+    memset(data, 0, sizeof(struct BMInvData));
+    data->data = object;
+    data->need = 0;
+    memcpy(data->inv, inv, BM_INV_SIZE);
+    HASH_ADD(hh, list->data, inv, BM_INV_SIZE, data);
+    return 1;
 }
 
 int bmInvSearchNode(struct BMInv* list, unsigned char* inv) {
-	struct BMInvNode* node;
+	struct BMInvData* node;
 	//Parameter check
 	if (list == NULL || inv == NULL) {
-		bmLog(__FUNCTION__, "Invalid parameter input!\n");
+		bmLog(__FUNCTION__, "Invalid parameter input!");
 		return 0;
 	}
 	//Search
-	node = list->data;
-	while (node) {
-		if (memcmp(node->inv, inv, BM_INV_SIZE) == 0) {
-			return 1;
-		}
-		node = node->next;
-	}
+    HASH_FIND(hh, list->data, inv, BM_INV_SIZE, node);
+	if (node != NULL) {
+        return 1;
+    }
 	return 0;
 }
 
 void bmInvDeleteNode(struct BMInv* list, unsigned char* inv) {
-	struct BMInvNode* pre;
-	struct BMInvNode* node;
+	struct BMInvData* node;
 	//Parameter check
 	if (list == NULL || inv == NULL) {
-		bmLog(__FUNCTION__, "Invalid parameter input!\n");
+		bmLog(__FUNCTION__, "Invalid parameter input!");
 		return;
 	}
 	//Search and delete
-	pre = NULL;
-	node = list->data;
-	while (node) {
-		if (memcmp(node->inv, inv, BM_INV_SIZE) == 0) {
-			if (pre == NULL) {
-				free(list->data);
-				list->data = NULL;
-			} else {
-				pre->next = node->next;
-				free(node);
-			}
-			return;
-		}
-		pre = node;
-		node = node->next;
-	}
+	HASH_FIND(hh, list->data, inv, BM_INV_SIZE, node);
+    if (node != NULL) {
+        HASH_DEL(list->data, node);
+    }
+}
+
+void bmInvCalculate(unsigned char* data, unsigned int length, unsigned char* result) {
+    unsigned char sha[512] = { 0 };
+    unsigned char sha2[512] = { 0 };
+    unsigned int shaLength;
+    unsigned int shaLength2;
+    EVP_MD_CTX* mdctx;
+
+    //Parameter Check
+    if (data == NULL || result == NULL) {
+        bmLog(__FUNCTION__, "Invalid parameter");
+        return;
+    }
+    //Once
+    mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
+    EVP_DigestUpdate(mdctx, data, length);
+    EVP_DigestFinal_ex(mdctx, sha, &shaLength);
+    EVP_MD_CTX_free(mdctx);
+    mdctx = NULL;
+    //Twice
+    mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
+    EVP_DigestUpdate(mdctx, sha, shaLength);
+    EVP_DigestFinal_ex(mdctx, sha2, &shaLength2);
+    EVP_MD_CTX_free(mdctx);
+    mdctx = NULL;
+    //Copy result
+    memcpy(result, sha2, BM_INV_SIZE);
+}
+
+void bmInvPrint(unsigned char* inv) {
+    int i;
+
+    for (i = 0; i < BM_INV_SIZE; i++) {
+        printf("%02x", inv[i]);
+    }
+    putchar('\n');
 }
 
 //THREAD
-#define TIME_TO_SLEEP 60
+#define TIME_TO_SLEEP 20
 void* watchThread(void* data) {
 	struct BMInv* inv = (struct BMInv*)data;
 	if (data == NULL) {
-		bmLog(__FUNCTION__, "Invalid parameter!\n");
+		bmLog(__FUNCTION__, "Invalid parameter");
 		return 0;
 	}
+    //FIXME:How to quit this loop?
 	while (1) {
 		watch(inv);
 		sleep(TIME_TO_SLEEP);
@@ -163,24 +206,22 @@ void* watchThread(void* data) {
 
 //PRIVATE
 void watch(struct BMInv* inv) {
-	struct BMInvNode* invNode;
 	struct BMPeerNode* peerNode;
-	int haveNew = 0;
+    struct BMInvData* data;
 
-	invNode = inv->data;
-	while (invNode) {
-		if (invNode->isNew) {
-			bmPeerAddGetdata(invNode->peer, invNode->inv);
-			invNode->isNew = 0;
-			haveNew = 1;
-		}
-		invNode = invNode->next;
-	}
-	if (haveNew) {
-		peerNode = BM_GLOBAL_PEERS->data;
-		while (peerNode) {
-			bmPeerSendGetdata(peerNode->peer);
-			peerNode = peerNode->next;
-		}
-	}
+	for (data = inv->data; data != NULL; data = data->hh.next) {
+        if (data->need) {
+            bmPeerAddGetdata(data->peer, data->inv);
+            data->need = 0;
+        }
+    }
+    if (BM_GLOBAL_PEERS) {
+        peerNode = BM_GLOBAL_PEERS->data;
+    } else {
+        peerNode = NULL;
+    }
+    while (peerNode) {
+        bmPeerSendGetdata(peerNode->peer);
+        peerNode = peerNode->next;
+    }
 }

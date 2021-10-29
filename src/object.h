@@ -3,6 +3,14 @@
 
 #include <stdint.h>
 
+struct BMObject {
+    uint8_t objectType;
+    uint8_t streamNumber;
+    uint8_t* payload;
+    uint64_t embeddedTime;
+    uint8_t tag[32];
+};
+
 /*
  * Description:
  *	Handle object packet

@@ -6,5 +6,5 @@ add_executable(bitmessage
         peer.c peer.h
         address.c address.h
         object.c object.c
-        )
+        utils.c utils.h)
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

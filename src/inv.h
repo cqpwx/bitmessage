@@ -3,27 +3,29 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include <uthash.h>
 
 #include "peer.h"
 #include "protocol.h"
+#include "object.h"
 
-struct BMInvNode {
-	uint8_t inv[BM_INV_SIZE];
-	int isNew;
+struct BMInvData {
+    unsigned char inv[32];
+    struct BMObject* data;
 	struct BMPeer* peer;
-	struct BMInvNode* next;
+    int need;
+    UT_hash_handle hh;
 };
 
 struct BMInv {
-	int count;
 	pthread_t watch;
-	struct BMInvNode* data;
+	struct BMInvData* data;
 };
 
 
 /*
 * Description:
-*	Create inv vector
+*	Create inv hash table
 * Return:
 *	The inv created.
 */
@@ -31,9 +33,9 @@ struct BMInv* bmInvCreate();
 
 /*
 * Description:
-*	Destory inv vector
+*	Destory inv hash table
 * Input:
-*	inv:Inv vector to destroy
+*	inv:Inv hash table to destroy
 */
 void bmInvDestory(struct BMInv* inv);
 
@@ -47,7 +49,19 @@ void bmInvDestory(struct BMInv* inv);
 * Return:
 *	1 if success or 0
 */
-int bmInvInsertNode(struct BMInv* list, uint8_t* inv, struct BMPeer* peer);
+int bmInvInsertNodeWithPeer(struct BMInv* list, uint8_t* inv, struct BMPeer* peer);
+
+/*
+* Description:
+*	Insert inv into inv list
+* Input:
+*	list:List to insert
+*	inv:Inv to insert
+*	object:Inv data
+* Return:
+*	1 if success or 0
+*/
+int bmInvInsertNodeWithObject(struct BMInv* list, uint8_t* inv, struct BMObject* object);
 
 /*
 * Description:
@@ -68,5 +82,24 @@ int bmInvSearchNode(struct BMInv* list, uint8_t* inv);
 *	inv:Inv to delete
 */
 void bmInvDeleteNode(struct BMInv* list, uint8_t* inv);
+
+/*
+ * Description:
+ *  Calculate inv from buffer
+ * Input:
+ *  data:Data to calculate
+ *  length:Data length
+ *  result:Calculate result
+ */
+void bmInvCalculate(unsigned char* data, unsigned int length, unsigned char* result);
+
+/*
+ * Description:
+ *  Print inv
+ * Input:
+ *  inv: inv to print
+ */
+void bmInvPrint(unsigned char* inv);
+
 
 #endif
