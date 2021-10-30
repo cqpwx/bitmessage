@@ -11,10 +11,12 @@
 
 #include "log.h"
 #include "protocol.h"
+#include "inv.h"
 #include "utils.h"
 
 #define BM_ADDRESS_VERSION 4
 
+extern struct BMInv* BM_GLOBAL_INV;
 
 /*
  * Description:
@@ -214,6 +216,7 @@ void storeToInv(void* ripe, unsigned int ripeLength,
     unsigned char signature[512];
     unsigned int signatureLength;
     unsigned long long nonce;
+    unsigned char inv[BM_INV_SIZE];
 
     //Calculate double hash of address data
     p = addressData;
@@ -271,5 +274,7 @@ void storeToInv(void* ripe, unsigned int ripeLength,
                        ttl);
     *(unsigned long long*)payload = htobe64(nonce);
 
-
+    //Add to inv
+    bmInvCalculate(payload, p - payload, inv);
+    bmInvInsertNodeWithObject(BM_GLOBAL_INV, inv, payload);
 }

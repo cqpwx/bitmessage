@@ -10,6 +10,7 @@
 #include <openssl/evp.h>
 
 #include "log.h"
+#include "utils.h"
 
 /*
  * Descritption:
@@ -150,33 +151,16 @@ void bmInvDeleteNode(struct BMInv* list, unsigned char* inv) {
 }
 
 void bmInvCalculate(unsigned char* data, unsigned int length, unsigned char* result) {
-    unsigned char sha[512] = { 0 };
-    unsigned char sha2[512] = { 0 };
-    unsigned int shaLength;
-    unsigned int shaLength2;
-    EVP_MD_CTX* mdctx;
-
+    unsigned char output[512] = { 0 };
     //Parameter Check
     if (data == NULL || result == NULL) {
         bmLog(__FUNCTION__, "Invalid parameter");
         return;
     }
-    //Once
-    mdctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
-    EVP_DigestUpdate(mdctx, data, length);
-    EVP_DigestFinal_ex(mdctx, sha, &shaLength);
-    EVP_MD_CTX_free(mdctx);
-    mdctx = NULL;
-    //Twice
-    mdctx = EVP_MD_CTX_new();
-    EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
-    EVP_DigestUpdate(mdctx, sha, shaLength);
-    EVP_DigestFinal_ex(mdctx, sha2, &shaLength2);
-    EVP_MD_CTX_free(mdctx);
-    mdctx = NULL;
+    //Calcuate double hash
+    bmUtilsCalculateDoubleHash(data, length, output);
     //Copy result
-    memcpy(result, sha2, BM_INV_SIZE);
+    memcpy(result, output, BM_INV_SIZE);
 }
 
 void bmInvPrint(unsigned char* inv) {
