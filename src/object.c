@@ -13,6 +13,7 @@
 #include "log.h"
 #include "object.h"
 #include "protocol.h"
+#include "utils.h"
 
 struct BMObjectHeader {
 	uint64_t nonce;
@@ -92,22 +93,11 @@ int checkNonce(void* payload, uint64_t payloadLength) {
 	uint8_t* p;
 	uint64_t expiresTime;
 	uint64_t ttl;
-	uint64_t nonceTrialsPerByte = 1000;
-	uint64_t payloadLengthExtraBytes = 1000;
 	uint8_t mdFirst[64] = {0};
 	uint32_t mdFirstLength = 0;
 	uint8_t tempBuffer[128] = {0};
 	uint8_t mdSecond[64] = {0};
-	uint32_t mdSecondLength = 0;
-	EVP_MD_CTX* mdctx;
 	uint64_t pow;
-	BN_CTX* bnctx;
-	BIGNUM* a;
-	BIGNUM* b;
-	BIGNUM* c;
-	BIGNUM* d;
-	BIGNUM* e;
-	BIGNUM* f;
 	uint64_t target;
 
 	p = (uint8_t*)payload;
@@ -119,46 +109,12 @@ int checkNonce(void* payload, uint64_t payloadLength) {
 		ttl = 300;
 	}
 	//Calclulate the POW
-	mdctx = EVP_MD_CTX_new();
-	EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
-	EVP_DigestUpdate(mdctx, p + 8, payloadLength - 8);
-	EVP_DigestFinal_ex(mdctx, mdFirst, &mdFirstLength);
-	EVP_MD_CTX_free(mdctx);
-	mdctx = NULL;
+    mdFirstLength = bmUtilsCalculateHash(p + 8, payloadLength - 8, mdFirst);
 	memcpy(tempBuffer, payload, 8);
 	memcpy(tempBuffer + 8, mdFirst, mdFirstLength);
-	mdctx = EVP_MD_CTX_new();
-	EVP_DigestInit_ex(mdctx, EVP_sha512(), NULL);
-	EVP_DigestUpdate(mdctx, tempBuffer, mdFirstLength + 8);
-	EVP_DigestFinal_ex(mdctx, mdSecond, &mdSecondLength);
-	EVP_MD_CTX_free(mdctx);
-	mdctx = NULL;
+    bmUtilsCalculateHash(tempBuffer, mdFirstLength + 8, mdSecond);
 	pow = be64toh(*(uint64_t*)mdSecond);
 	//Compare
-	bnctx = BN_CTX_new();
-	a = BN_new();
-	b = BN_new();
-	c = BN_new();
-	d = BN_new();
-	e = BN_new();
-	f = BN_new();
-	BN_set_word(a, 2);
-	BN_set_word(b, 64);
-	if (!BN_exp(c, a, b, bnctx)) {
-		bmLog(__FUNCTION__, "failed to calculate 2^64");
-		return 0;
-	}
-	BN_set_word(d, nonceTrialsPerByte * (payloadLength + payloadLengthExtraBytes + ((ttl * (payloadLength + payloadLengthExtraBytes)) / 65535u)));
-	if (!BN_div(e, f, c, d, bnctx)) {
-		bmLog(__FUNCTION__, "failed to calculate target");
-	}
-	target = BN_get_word(e);
-	BN_free(a);
-	BN_free(b);
-	BN_free(c);
-	BN_free(d);
-	BN_free(e);
-	BN_free(f);
-	BN_CTX_free(bnctx);
+    target = bmUtilsCalculateTarget(payloadLength, ttl);
 	return pow <= target;
 }

@@ -95,4 +95,15 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
  *   Nonce
  */
 unsigned long long bmUtilsPOW(void* payload, unsigned int payloadLength, unsigned int ttl);
+
+/*
+ * Description:
+ *   Calculate target value from TTL
+ * Input:
+ *   length:payload length
+ *   ttl:ttl
+ * Return:
+ *   target value
+ */
+unsigned long long bmUtilsCalculateTarget(unsigned int length, unsigned int ttl);
 #endif

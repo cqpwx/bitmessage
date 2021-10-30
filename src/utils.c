@@ -41,17 +41,6 @@ void generateKey(unsigned short curve,
                  void* publicKeyX, unsigned int* publicKeyXLength,
                  void* publicKeyY, unsigned int* publicKeyYLength);
 
-/*
- * Description:
- *   Calculate target value from TTL
- * Input:
- *   length:payload length
- *   ttl:ttl
- * Return:
- *   target value
- */
-unsigned long long calculateTarget(unsigned int length, unsigned int ttl);
-
 int bmUtilsCalculateHash(void* data, unsigned int length, void* result) {
     EVP_MD_CTX* evp_ctx;
     unsigned int resultLength = 0;
@@ -370,7 +359,7 @@ unsigned long long bmUtilsPOW(void* payload, unsigned int payloadLength, unsigne
         return 0;
     }
     //Calculate target
-    target = calculateTarget(payloadLength, ttl);
+    target = bmUtilsCalculateTarget(payloadLength, ttl);
     //Calculate initialHash
     initialHashLength = bmUtilsCalculateHash(payload, payloadLength, initialHash);
     //Calculate POW
@@ -522,7 +511,7 @@ void generateKey(unsigned short curve,
     BN_free(publicKeyYBN);
 }
 
-unsigned long long calculateTarget(unsigned int length, unsigned int ttl) {
+unsigned long long bmUtilsCalculateTarget(unsigned int length, unsigned int ttl) {
     BN_CTX* ctx;
     BIGNUM* target;
     BIGNUM* num_64;
