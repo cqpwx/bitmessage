@@ -542,5 +542,10 @@ unsigned long long calculateTarget(unsigned int length, unsigned int ttl) {
     BN_div(target, NULL, target, num_temp, ctx);
     BN_bn2bin(target, (unsigned char*)&temp);
 
+    BN_free(num_64);
+    BN_free(num_temp);
+    BN_free(target);
+    BN_CTX_free(ctx);
+
     return be64toh(temp);
 }
