@@ -83,4 +83,16 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
 int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
                    void* publicEncryptionKey, unsigned int publicEncryptionKeyLength,
                    void* result);
+
+/*
+ * Description:
+ *   Calculate Proof of Work
+ * Input:
+ *   payload:Payload to calculate
+ *   payloadLength:payload length
+ *   ttl:ttl
+ * Return:
+ *   Nonce
+ */
+unsigned long long bmUtilsPOW(void* payload, unsigned int payloadLength, unsigned int ttl);
 #endif

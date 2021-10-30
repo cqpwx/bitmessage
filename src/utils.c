@@ -41,6 +41,17 @@ void generateKey(unsigned short curve,
                  void* publicKeyX, unsigned int* publicKeyXLength,
                  void* publicKeyY, unsigned int* publicKeyYLength);
 
+/*
+ * Description:
+ *   Calculate target value from TTL
+ * Input:
+ *   length:payload length
+ *   ttl:ttl
+ * Return:
+ *   target value
+ */
+unsigned long long calculateTarget(unsigned int length, unsigned int ttl);
+
 int bmUtilsCalculateHash(void* data, unsigned int length, void* result) {
     EVP_MD_CTX* evp_ctx;
     unsigned int resultLength = 0;
@@ -343,6 +354,42 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     return p - (unsigned char*)result;
 }
 
+unsigned long long bmUtilsPOW(void* payload, unsigned int payloadLength, unsigned int ttl) {
+    unsigned long long target;
+    unsigned char initialHash[512] = { 0 };
+    unsigned int initialHashLength;
+    unsigned char buffer[512] = { 0 };
+    unsigned int bufferLength = 0;
+    unsigned char output[512]  = { 0 };
+    unsigned long long temp;
+    unsigned long long* nonce;
+    unsigned long long* hash;
+    //Parameter check
+    if (payload == NULL) {
+        bmLog(__FUNCTION__, "Invalid parameter!");
+        return 0;
+    }
+    //Calculate target
+    target = calculateTarget(payloadLength, ttl);
+    //Calculate initialHash
+    initialHashLength = bmUtilsCalculateHash(payload, payloadLength, initialHash);
+    //Calculate POW
+    temp = 0;
+    hash = (unsigned long long*)output;
+    nonce = (unsigned long long*)buffer;
+    memcpy(buffer + sizeof(unsigned long long), initialHash, initialHashLength);
+    bufferLength = sizeof(unsigned long long) + initialHashLength;
+    while (1) {
+        *nonce = htobe64(temp);
+        bmUtilsCalculateDoubleHash(buffer, bufferLength, output);
+        if (be64toh(*hash) < target) {
+            return temp;
+        } else {
+            temp++;
+        }
+    }
+}
+
 //PRIVATE
 void generateECDHKey(unsigned short curve,
                      void* x, void* y,
@@ -473,4 +520,27 @@ void generateKey(unsigned short curve,
     EC_KEY_free(key);
     BN_free(publicKeyXBN);
     BN_free(publicKeyYBN);
+}
+
+unsigned long long calculateTarget(unsigned int length, unsigned int ttl) {
+    BN_CTX* ctx;
+    BIGNUM* target;
+    BIGNUM* num_64;
+    BIGNUM* num_temp;
+    unsigned long long temp;
+
+    temp = htobe64(1000 * (length + 8 + 1000 + ((ttl * (length + 8 + 1000)) / (1 << 16))));
+
+    ctx = BN_CTX_new();
+    target = BN_new();
+    num_64 = BN_new();
+    num_temp = BN_new();
+    BN_set_word(target, 2);
+    BN_set_word(num_64, 64);
+    BN_bin2bn((unsigned char*)&temp, sizeof(unsigned long long), num_temp);
+    BN_exp(target, target, num_64, ctx);
+    BN_div(target, NULL, target, num_temp, ctx);
+    BN_bn2bin(target, (unsigned char*)&temp);
+
+    return be64toh(temp);
 }

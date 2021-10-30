@@ -213,6 +213,7 @@ void storeToInv(void* ripe, unsigned int ripeLength,
     unsigned char* q;
     unsigned char signature[512];
     unsigned int signatureLength;
+    unsigned long long nonce;
 
     //Calculate double hash of address data
     p = addressData;
@@ -220,17 +221,17 @@ void storeToInv(void* ripe, unsigned int ripeLength,
     p += bmWriteVarint(1, p);
     memcpy(p, ripe + 1, ripeLength - 1);
     p += ripeLength - 1;
-
     addressDataLength = p - addressData;
     addressDataDoubleHashLength = bmUtilsCalculateDoubleHash(addressData,
                                                                   addressDataLength,
                                                                   addressDataDoubleHash);
+
     //Build payload
     srand(time(NULL));
     ttl = 28 * 24 * 60 * 60 + (rand() % 300);
     embeddedTime = time(NULL) + ttl;
     payload = (unsigned char*)malloc(512);
-    p = (unsigned char*)payload;
+    p = (unsigned char*)payload + sizeof(unsigned long long);
     *(uint64_t*)p = htobe64(embeddedTime);
     p += sizeof(uint64_t);
     *(uint32_t*)p = htobe32(1);
@@ -250,8 +251,8 @@ void storeToInv(void* ripe, unsigned int ripeLength,
     q += bmWriteVarint(1000, q);//noncetrialsperbyte
     q += bmWriteVarint(1000, q);//payloadlengthextrabytes
     //Signing
-    memcpy(tempBuffer, payload, p - payload);
-    tempLength += (p - payload);
+    memcpy(tempBuffer, payload + sizeof(unsigned long long), p - payload + sizeof(unsigned long long));
+    tempLength += (p - payload + sizeof(unsigned long long));
     memcpy(tempBuffer + tempLength, dataBuffer, q - dataBuffer);
     tempLength += (q - dataBuffer);
     signatureLength = bmUtilsSigning(tempBuffer, tempLength,
@@ -265,5 +266,10 @@ void storeToInv(void* ripe, unsigned int ripeLength,
                         publicEncryptionKey, publicEncryptionKeyLength,
                         p);
     //Do POW for this public key message
+    nonce = bmUtilsPOW(payload + sizeof(unsigned long long),
+                       p - payload + sizeof(unsigned long long),
+                       ttl);
+    *(unsigned long long*)payload = htobe64(nonce);
+
 
 }
