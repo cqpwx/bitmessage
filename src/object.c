@@ -14,6 +14,7 @@
 #include "object.h"
 #include "protocol.h"
 #include "utils.h"
+#include "address.h"
 
 struct BMObjectHeader {
 	uint64_t nonce;
@@ -85,6 +86,96 @@ int bmObjectHandle(uint8_t* payload, uint64_t payloadLength) {
 			bmLog(__FUNCTION__, "Unknown object received type=%x", objectType);
 	}
 	return 1;
+}
+
+struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
+                                      void* publicSigningKey, unsigned int publicSigningKeyLength,
+                                      void* publicEncryptionKey, unsigned int publicEncryptionKeyLength,
+                                      void* privateSigningKey, unsigned int privateSigningKeyLength) {
+    unsigned char addressData[512] = { 0 };
+    unsigned int addressDataLength;
+    unsigned char addressDataDoubleHash[512] = { 0 };
+    unsigned int addressDataDoubleHashLength;
+    unsigned char dataBuffer[512] = { 0 };
+    unsigned int dataLength;
+    unsigned char tempBuffer[1024] = { 0 };
+    unsigned int tempLength;
+    int ttl;
+    int embeddedTime;
+    unsigned char* payload;
+    unsigned char* p;
+    unsigned char* q;
+    unsigned char signature[512];
+    unsigned int signatureLength;
+    unsigned long long nonce;
+    struct BMObject* result;
+
+    //Calculate double hash of address data
+    p = addressData;
+    p += bmWriteVarint(BM_ADDRESS_VERSION, p);
+    p += bmWriteVarint(1, p);
+    memcpy(p, ripe + 1, ripeLength - 1);
+    p += ripeLength - 1;
+    addressDataLength = p - addressData;
+    addressDataDoubleHashLength = bmUtilsCalculateDoubleHash(addressData,
+                                                             addressDataLength,
+                                                             addressDataDoubleHash);
+
+    //Build payload
+    srand(time(NULL));
+    ttl = 28 * 24 * 60 * 60 + (rand() % 300);
+    embeddedTime = time(NULL) + ttl;
+    payload = (unsigned char*)malloc(512);
+    p = (unsigned char*)payload + sizeof(unsigned long long);
+    *(uint64_t*)p = htobe64(embeddedTime);
+    p += sizeof(uint64_t);
+    *(uint32_t*)p = htobe32(1);
+    p += sizeof(uint32_t);
+    p += bmWriteVarint(BM_ADDRESS_VERSION, p);
+    p += bmWriteVarint(1, p);
+    memcpy(p, addressDataDoubleHash + 32, addressDataDoubleHashLength - 32);
+    p += addressDataDoubleHashLength - 32;
+    //Build data
+    q = dataBuffer;
+    *(uint32_t*)q = htobe32(0);//bitfiled
+    q += sizeof(uint32_t);
+    memcpy(q, publicSigningKey, publicSigningKeyLength);//publicSigningKey
+    q += publicSigningKeyLength;
+    memcpy(q, publicEncryptionKey, publicEncryptionKeyLength);//publicEncryptionKey
+    q += publicEncryptionKeyLength;
+    q += bmWriteVarint(1000, q);//noncetrialsperbyte
+    q += bmWriteVarint(1000, q);//payloadlengthextrabytes
+    //Signing
+    memcpy(tempBuffer, payload + sizeof(unsigned long long), p - payload + sizeof(unsigned long long));
+    tempLength += (p - payload + sizeof(unsigned long long));
+    memcpy(tempBuffer + tempLength, dataBuffer, q - dataBuffer);
+    tempLength += (q - dataBuffer);
+    signatureLength = bmUtilsSigning(tempBuffer, tempLength,
+                                     privateSigningKey, privateSigningKeyLength,
+                                     signature);
+    q += bmWriteVarint(signatureLength, q);
+    memcpy(q, signature, signatureLength);
+    q += signatureLength;
+    //Encryption
+    p += bmUtilsEncrypt(dataBuffer, q - dataBuffer,
+                        publicEncryptionKey, publicEncryptionKeyLength,
+                        p);
+    //Do POW for this public key message
+    nonce = bmUtilsPOW(payload + sizeof(unsigned long long),
+                       p - payload + sizeof(unsigned long long),
+                       ttl);
+    *(unsigned long long*)payload = htobe64(nonce);
+
+    //Setup result
+    result = (struct BMObject*)malloc(sizeof(struct BMObject));
+    result->payload = payload;
+    result->payloadLength = p - payload;
+    result->objectType = BM_OBJECT_PUBKEY;
+    result->streamNumber = 1;
+    result->embeddedTime = embeddedTime;
+    bmInvCalculate(result->payload, result->payloadLength, result->inv);
+
+    return result;
 }
 
 //PIRVATE

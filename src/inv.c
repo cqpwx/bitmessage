@@ -95,15 +95,15 @@ int bmInvInsertNodeWithPeer(struct BMInv* list, unsigned char* inv, struct BMPee
     return 1;
 }
 
-int bmInvInsertNodeWithObject(struct BMInv* list, uint8_t* inv, struct BMObject* object) {
+int bmInvInsertNodeWithObject(struct BMInv* list, struct BMObject* object) {
     struct BMInvData* data;
     //Parameter check
-    if (list == NULL || inv == NULL) {
+    if (list == NULL || object == NULL) {
         bmLog(__FUNCTION__, "Invalid parameter input!\n");
         return 0;
     }
     //Search if we have that inv
-    if (bmInvSearchNode(list, inv)) {
+    if (bmInvSearchNode(list, object->inv)) {
         bmLog(__FUNCTION__, "Already in the list,Ignored.");
         return 0;
     }
@@ -116,7 +116,7 @@ int bmInvInsertNodeWithObject(struct BMInv* list, uint8_t* inv, struct BMObject*
     memset(data, 0, sizeof(struct BMInvData));
     data->data = object;
     data->need = 0;
-    memcpy(data->inv, inv, BM_INV_SIZE);
+    memcpy(data->inv, object->inv, BM_INV_SIZE);
     HASH_ADD(hh, list->data, inv, BM_INV_SIZE, data);
     return 1;
 }

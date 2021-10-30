@@ -61,7 +61,7 @@ int bmInvInsertNodeWithPeer(struct BMInv* list, uint8_t* inv, struct BMPeer* pee
 * Return:
 *	1 if success or 0
 */
-int bmInvInsertNodeWithObject(struct BMInv* list, uint8_t* inv, struct BMObject* object);
+int bmInvInsertNodeWithObject(struct BMInv* list, struct BMObject* object);
 
 /*
 * Description:

@@ -143,7 +143,7 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
     BIGNUM* publicKeyX;
     BIGNUM* publicKeyY;
     EC_KEY* key;
-    EC_GROUP* group;
+    const EC_GROUP* group;
     EC_POINT* publicKey;
     EVP_MD_CTX* ctx;
     unsigned char digest[512] = {0};
@@ -176,7 +176,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
-        EC_GROUP_free(group);
         EC_POINT_free(publicKey);
         return 0;
     }
@@ -187,7 +186,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
-        EC_GROUP_free(group);
         EC_POINT_free(publicKey);
         EC_KEY_free(key);
         return 0;
@@ -199,7 +197,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
-        EC_GROUP_free(group);
         EC_POINT_free(publicKey);
         EC_KEY_free(key);
         return 0;
@@ -209,7 +206,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
-        EC_GROUP_free(group);
         EC_POINT_free(publicKey);
         EC_KEY_free(key);
         return 0;
@@ -223,7 +219,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
-        EC_GROUP_free(group);
         EC_POINT_free(publicKey);
         EC_KEY_free(key);
         EVP_MD_CTX_free(ctx);
@@ -238,7 +233,6 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
     BN_free(privateKey);
     BN_free(publicKeyX);
     BN_free(publicKeyY);
-    EC_GROUP_free(group);
     EC_POINT_free(publicKey);
     EC_KEY_free(key);
     EVP_MD_CTX_free(ctx);
@@ -256,7 +250,7 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     unsigned char generatePublicKeyX[512] = { 0 };
     unsigned int generatePublicKeyXLength = 0;
     unsigned char generatePublicKeyY[512] = { 0 };
-    unsigned char generatePublicKeyYLength = 0;
+    unsigned int generatePublicKeyYLength = 0;
     unsigned char generatePublicKey[512];
     unsigned int generatePublicKeyLength;
     unsigned char ECDHKey[32] = { 0 };
@@ -387,7 +381,7 @@ void generateECDHKey(unsigned short curve,
     EC_KEY* otherKey;
     BIGNUM* otherPublicKeyX;
     BIGNUM* otherPublicKeyY;
-    EC_GROUP* otherGroup;
+    const EC_GROUP* otherGroup;
     EC_POINT* otherPublicKey;
     EC_KEY* ownKey;
     unsigned int resultLength;
@@ -409,7 +403,7 @@ void generateECDHKey(unsigned short curve,
     otherPublicKey = EC_POINT_new(otherGroup);
     if (EC_POINT_set_affine_coordinates_GFp(otherGroup, otherPublicKey, otherPublicKeyX, otherPublicKeyY, 0) == 0) {
         bmLog(__FUNCTION__, "Set affine coordinates gfp failed");
-        EC_POINT_free(otherKey);
+        EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
@@ -417,7 +411,7 @@ void generateECDHKey(unsigned short curve,
     }
     if (EC_KEY_set_public_key(otherKey, otherPublicKey) == 0) {
         bmLog(__FUNCTION__, "Set public key failed");
-        EC_POINT_free(otherKey);
+        EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
@@ -425,7 +419,7 @@ void generateECDHKey(unsigned short curve,
     }
     if (EC_KEY_check_key(otherKey) == 0) {
         bmLog(__FUNCTION__, "Check key failed");
-        EC_POINT_free(otherKey);
+        EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
@@ -435,14 +429,14 @@ void generateECDHKey(unsigned short curve,
     ownKey = EC_KEY_new_by_curve_name(curve);
     if (EC_KEY_generate_key(ownKey) == 0) {
         bmLog(__FUNCTION__, "Generate key failed");
-        EC_POINT_free(otherKey);
+        EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
     }
     if (EC_KEY_check_key(ownKey) == 0) {
         bmLog(__FUNCTION__, "Check own key failed");
-        EC_POINT_free(otherKey);
+        EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
@@ -457,7 +451,7 @@ void generateECDHKey(unsigned short curve,
     }
 
     //Cleanup
-    EC_POINT_free(otherKey);
+    EC_POINT_free(otherPublicKey);
     BN_free(otherPublicKeyX);
     BN_free(otherPublicKeyY);
     EC_KEY_free(otherKey);
@@ -469,11 +463,11 @@ void generateKey(unsigned short curve,
                  void* publicKeyX, unsigned int* publicKeyXLength,
                  void* publicKeyY, unsigned int* publicKeyYLength) {
     EC_KEY* key;
-    BIGNUM* privateKeyBN;
+    const BIGNUM* privateKeyBN;
     BIGNUM* publicKeyXBN;
     BIGNUM* publicKeyYBN;
-    EC_GROUP* group;
-    EC_POINT* publicKey;
+    const EC_GROUP* group;
+    const EC_POINT* publicKey;
 
     //Parameter check
     if (privateKey == NULL || publicKeyX == NULL || publicKeyY == NULL) {
@@ -482,12 +476,12 @@ void generateKey(unsigned short curve,
     }
     //Generate key
     key = EC_KEY_new_by_curve_name(curve);
-    if (EC_KEY_generate_key(generateKey) == 0) {
+    if (EC_KEY_generate_key(key) == 0) {
         bmLog(__FUNCTION__, "Generate key failed");
         EC_KEY_free(key);
         return;
     }
-    if (EC_KEY_check_key(generateKey) == 0) {
+    if (EC_KEY_check_key(key) == 0) {
         bmLog(__FUNCTION__, "Check own key failed");
         EC_KEY_free(key);
         return;
