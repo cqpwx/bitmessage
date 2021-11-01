@@ -14,7 +14,6 @@
 #include "object.h"
 #include "protocol.h"
 #include "utils.h"
-#include "address.h"
 
 struct BMObjectHeader {
 	uint64_t nonce;
@@ -88,10 +87,7 @@ int bmObjectHandle(uint8_t* payload, uint64_t payloadLength) {
 	return 1;
 }
 
-struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
-                                      void* publicSigningKey, unsigned int publicSigningKeyLength,
-                                      void* publicEncryptionKey, unsigned int publicEncryptionKeyLength,
-                                      void* privateSigningKey, unsigned int privateSigningKeyLength) {
+struct BMObject* bmObjectCreatePubkey(struct BMAddress* address) {
     unsigned char addressData[512] = { 0 };
     unsigned int addressDataLength;
     unsigned char addressDataDoubleHash[512] = { 0 };
@@ -114,8 +110,8 @@ struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
     p = addressData;
     p += bmWriteVarint(BM_ADDRESS_VERSION, p);
     p += bmWriteVarint(1, p);
-    memcpy(p, ripe + 1, ripeLength - 1);
-    p += ripeLength - 1;
+    memcpy(p, address->ripe + 1, address->ripeLength - 1);
+    p += address->ripeLength - 1;
     addressDataLength = p - addressData;
     addressDataDoubleHashLength = bmUtilsCalculateDoubleHash(addressData,
                                                              addressDataLength,
@@ -139,10 +135,10 @@ struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
     q = dataBuffer;
     *(uint32_t*)q = htobe32(0);//bitfiled
     q += sizeof(uint32_t);
-    memcpy(q, publicSigningKey, publicSigningKeyLength);//publicSigningKey
-    q += publicSigningKeyLength;
-    memcpy(q, publicEncryptionKey, publicEncryptionKeyLength);//publicEncryptionKey
-    q += publicEncryptionKeyLength;
+    memcpy(q, address->publicSignKey, address->publicSignKeyLength);//publicSigningKey
+    q += address->publicSignKeyLength;
+    memcpy(q, address->publicEncryptionKey, address->publicEncryptionKeyLength);//publicEncryptionKey
+    q += address->publicEncryptionKeyLength;
     q += bmWriteVarint(1000, q);//noncetrialsperbyte
     q += bmWriteVarint(1000, q);//payloadlengthextrabytes
     //Signing
@@ -151,14 +147,14 @@ struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
     memcpy(tempBuffer + tempLength, dataBuffer, q - dataBuffer);
     tempLength += (q - dataBuffer);
     signatureLength = bmUtilsSigning(tempBuffer, tempLength,
-                                     privateSigningKey, privateSigningKeyLength,
+                                     address->privateSignKey, 32,
                                      signature);
     q += bmWriteVarint(signatureLength, q);
     memcpy(q, signature, signatureLength);
     q += signatureLength;
     //Encryption
     p += bmUtilsEncrypt(dataBuffer, q - dataBuffer,
-                        publicEncryptionKey, publicEncryptionKeyLength,
+                        address->publicEncryptionKey, address->publicEncryptionKeyLength,
                         p);
     //Do POW for this public key message
     nonce = bmUtilsPOW(payload + sizeof(unsigned long long),

@@ -5,6 +5,7 @@
 #include <openssl/ec.h>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
+#include <openssl/err.h>
 
 #include "log.h"
 
@@ -120,9 +121,14 @@ int bmUtilsPointMulti(unsigned char* secret, unsigned char* result) {
     EC_POINT_mul(group, pubkey, privkey, NULL, NULL, NULL);
     EC_KEY_set_private_key(k, privkey);
     EC_KEY_set_public_key(k, pubkey);
+    if (EC_KEY_check_key(k) == 0) {
+        bmLog(__FUNCTION__, "Check key failed");
+        return 0;
+    }
 
+    len = i2o_ECPublicKey(k, NULL);
     pubkeyBuffer = result;
-    len =  i2o_ECPublicKey(k, &pubkeyBuffer);
+    i2o_ECPublicKey(k, &pubkeyBuffer);
 
     EC_POINT_free(pubkey);
     BN_free(privkey);
@@ -166,7 +172,7 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
     //curve
     curve = 0x02ca;
     //key to big number
-    privateKey = BN_bin2bn(privateSignKey, publicSignKeyLength, NULL);
+    privateKey = BN_bin2bn(privateSignKey, privateSignKeyLength, NULL);
     publicKeyX = BN_bin2bn(publicSignKeyX, 0x20, NULL);
     publicKeyY = BN_bin2bn(publicSignKeyY, 0x20, NULL);
     //ec key
@@ -202,7 +208,17 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         return 0;
     }
     if (EC_KEY_set_public_key(key, publicKey) == 0) {
-        bmLog(__FUNCTION__, "SEt public key failed");
+        bmLog(__FUNCTION__, "Set public key failed");
+        BN_free(privateKey);
+        BN_free(publicKeyX);
+        BN_free(publicKeyY);
+        EC_POINT_free(publicKey);
+        EC_KEY_free(key);
+        return 0;
+    }
+    if (EC_KEY_check_key(key) == 0) {
+        ERR_print_errors_fp(stderr);
+        bmLog(__FUNCTION__, "Check key failed");
         BN_free(privateKey);
         BN_free(publicKeyX);
         BN_free(publicKeyY);
@@ -225,10 +241,21 @@ int bmUtilsSigning(void* buffer, unsigned int bufferLength,
         return 0;
     }
     EVP_DigestFinal_ex(ctx, digest, &digestLength);
-    ECDSA_sign(0, digest, digestLength, result, &resultLength, key);
+
+    if (ECDSA_sign(0, digest, digestLength, result, &resultLength, key) != 1) {
+        bmLog(__FUNCTION__, "ECDSA sign failed");
+        BN_free(privateKey);
+        BN_free(publicKeyX);
+        BN_free(publicKeyY);
+        EC_POINT_free(publicKey);
+        EC_KEY_free(key);
+        EVP_MD_CTX_free(ctx);
+        return 0;
+    }
     if (ECDSA_verify(0, digest, digestLength, result, resultLength, key) != 1) {
         bmLog(__FUNCTION__, "ECDSA verify failed");
     }
+
     //Cleanup
     BN_free(privateKey);
     BN_free(publicKeyX);
@@ -252,7 +279,7 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     unsigned char generatePublicKeyY[512] = { 0 };
     unsigned int generatePublicKeyYLength = 0;
     unsigned char generatePublicKey[512];
-    unsigned int generatePublicKeyLength;
+    unsigned int generatePublicKeyLength = 0;
     unsigned char ECDHKey[32] = { 0 };
     unsigned char ECDHKeySHA[512] = { 0 };
     unsigned int ECDHKeySHALength = 0;
@@ -274,8 +301,8 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     }
 
     //Create keys
-    memcpy(publicEncryptionKeyX, publicEncryptionKey, 0x20);
-    memcpy(publicEncryptionKeyY, publicEncryptionKey + 0x20, 0x20);
+    memcpy(publicEncryptionKeyX, publicEncryptionKey + 1, 0x20);
+    memcpy(publicEncryptionKeyY, publicEncryptionKey + publicEncryptionKeyLength - 0x20, 0x20);
     curve = 0x02ca;
     //Generate ECDH key
     generateKey(curve,
@@ -293,7 +320,7 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     keyMLength = ECDHKeySHALength - 32;
     memcpy(keyM, ECDHKeySHA + 32, keyMLength);
     //Build generated public key
-    p = generatePrivateKey;
+    p = generatePublicKey;
     *(unsigned short*)p = htobe16(0x02ca);
     p += sizeof(unsigned short);
     *(unsigned short*)p = htobe16(generatePublicKeyXLength);
@@ -304,6 +331,7 @@ int bmUtilsEncrypt(void* buffer, unsigned int bufferLength,
     p += sizeof(unsigned short);
     memcpy(p, generatePublicKeyY, generatePublicKeyYLength);
     p += generatePublicKeyYLength;
+    generatePublicKeyLength = p - generatePublicKey;
 
     //Generate iv
     RAND_bytes(iv, 16);
@@ -384,6 +412,7 @@ void generateECDHKey(unsigned short curve,
     const EC_GROUP* otherGroup;
     EC_POINT* otherPublicKey;
     EC_KEY* ownKey;
+    BIGNUM* ownPrivateKey;
     unsigned int resultLength;
 
     //Parameter check
@@ -394,7 +423,7 @@ void generateECDHKey(unsigned short curve,
     //Create other key
     otherKey = EC_KEY_new_by_curve_name(curve);
     if (otherKey == NULL) {
-        bmLog(__FUNCTION__, "Create key failed");
+        bmLog(__FUNCTION__, "Create other key failed");
         return;
     }
     otherPublicKeyX = BN_bin2bn(x, 0x20, 0);
@@ -427,15 +456,16 @@ void generateECDHKey(unsigned short curve,
     }
     //Create own key
     ownKey = EC_KEY_new_by_curve_name(curve);
-    if (EC_KEY_generate_key(ownKey) == 0) {
-        bmLog(__FUNCTION__, "Generate key failed");
+    if (ownKey == NULL) {
+        bmLog(__FUNCTION__, "create own key failed");
         EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
         EC_KEY_free(otherKey);
     }
-    if (EC_KEY_check_key(ownKey) == 0) {
-        bmLog(__FUNCTION__, "Check own key failed");
+    ownPrivateKey = BN_bin2bn(privateKey, privateKeyLength, NULL);
+    if (EC_KEY_set_private_key(ownKey, ownPrivateKey) == 0) {
+        bmLog(__FUNCTION__, "set own private key failed");
         EC_POINT_free(otherPublicKey);
         BN_free(otherPublicKeyX);
         BN_free(otherPublicKeyY);
@@ -489,6 +519,8 @@ void generateKey(unsigned short curve,
     privateKeyBN = EC_KEY_get0_private_key(key);
     group = EC_KEY_get0_group(key);
     publicKey = EC_KEY_get0_public_key(key);
+    publicKeyXBN = BN_new();
+    publicKeyYBN = BN_new();
     if (EC_POINT_get_affine_coordinates_GFp(group, publicKey, publicKeyXBN, publicKeyYBN, 0) == 0) {
         bmLog(__FUNCTION__, "Get affine coordinates gfp failed");
         EC_KEY_free(key);

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "inv.h"
+#include "address.h"
 
 struct BMObject {
     uint8_t objectType;
@@ -40,8 +41,5 @@ int bmObjectHandle(uint8_t* payload, uint64_t payloadLength);
  * Return:
  *   the object
  */
-struct BMObject* bmObjectCreatePubkey(void* ripe, unsigned int ripeLength,
-                                      void* publicSigningKey, unsigned int publicSigningKeyLength,
-                                      void* publicEncryptionKey, unsigned int publicEncryptionKeyLength,
-                                      void* privateSigningKey, unsigned int privateSigningKeyLength);
+struct BMObject* bmObjectCreatePubkey(struct BMAddress* address);
 #endif

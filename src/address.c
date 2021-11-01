@@ -47,12 +47,13 @@ int encodeAddress(void* ripe, unsigned int ripeLength, unsigned char* result);
 void storeToInv();
 
 //PUBLIC
-int bmAddressGenerateRandom(void* buffer) {
+struct BMAddress* bmAddressGenerateRandom() {
+    unsigned char addressBuffer[128] = {0};
     unsigned char potentialPrivSigningKey[32] = { 0 };
-    unsigned char potentialPubSigningKey[64] = { 0 };
+    unsigned char potentialPubSigningKey[128] = { 0 };
     unsigned int potentialPubSigningKeyLength = 0;
     unsigned char potentialPrivEncryptionKey[32] = { 0 };
-    unsigned char potentialPubEncryptionKey[64] = { 0 };
+    unsigned char potentialPubEncryptionKey[128] = { 0 };
     unsigned int potentialPubEncryptionKeyLength = 0;
     unsigned char tempBuffer[512] = { 0 };
     unsigned char tempBuffer2[512] = { 0 };
@@ -62,12 +63,9 @@ int bmAddressGenerateRandom(void* buffer) {
     struct BMObject* pubkeyObject;
     int addressLength;
     unsigned char inv[BM_INV_SIZE];
+    struct BMAddress* result;
 
-    //Parameter check
-    if (buffer == NULL) {
-        bmLog(__FUNCTION__, "Invalid parameter!");
-        return 0;
-    }
+
     //Create random ripe
     while (RAND_bytes(potentialPrivSigningKey, 32) != 1) {
         sleep(1);
@@ -87,25 +85,33 @@ int bmAddressGenerateRandom(void* buffer) {
         memcpy(tempBuffer + potentialPubSigningKeyLength,
                potentialPubEncryptionKey,
                potentialPubEncryptionKeyLength);
-        shaLength = bmUtilsCalculateHash(tempBuffer, potentialPubSigningKeyLength + potentialPubEncryptionKeyLength, tempBuffer2);
+        shaLength = bmUtilsCalculateHash(tempBuffer,
+                                         potentialPubSigningKeyLength + potentialPubEncryptionKeyLength,
+                                         tempBuffer2);
         ripeLength = bmUtilsCalculateRipeHash(tempBuffer2, shaLength, ripe);
-        if (ripe[0] == 0) {
+        if (ripe[0] == 0 && ripe[1] != 0) {
             break;
         }
     }
 
     //encode address
-    addressLength = encodeAddress(ripe, ripeLength, buffer);
+    addressLength = encodeAddress(ripe, ripeLength, addressBuffer);
 
-    //Store address to inv list
-    //Add to inv
-    pubkeyObject = bmObjectCreatePubkey(ripe, ripeLength,
-                                        potentialPubSigningKey, potentialPubSigningKeyLength,
-                                        potentialPubEncryptionKey, potentialPubEncryptionKeyLength,
-                                        potentialPrivEncryptionKey, 32);
-    bmInvInsertNodeWithObject(BM_GLOBAL_INV, pubkeyObject);
+    //Build BMAddress struct
+    result = (struct BMAddress*)malloc(sizeof(struct BMAddress));
+    memset(result, 0, sizeof(struct BMAddress));
+    memcpy(result->privateSignKey, potentialPrivSigningKey, 32);
+    memcpy(result->privateEncryptKey, potentialPrivEncryptionKey, 32);
+    memcpy(result->publicSignKey, potentialPubSigningKey, potentialPubSigningKeyLength);
+    result->publicSignKeyLength = potentialPubSigningKeyLength;
+    memcpy(result->publicEncryptionKey, potentialPubEncryptionKey, potentialPubEncryptionKeyLength);
+    result->publicEncryptionKeyLength = potentialPubEncryptionKeyLength;
+    memcpy(result->ripe, ripe, ripeLength);
+    result->ripeLength = ripeLength;
+    memcpy(result->address, addressBuffer, addressLength);
+    result->addressLength = addressLength;
 
-    return addressLength;
+    return result;
 }
 
 //PRIVATE

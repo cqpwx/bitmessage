@@ -8,7 +8,8 @@ struct BMPeerList* BM_GLOBAL_PEERS = NULL;
 
 int main(int argc, char* argv[]) {
 	struct BMPeer* peer;
-    unsigned char address[64] = {0};
+    struct BMAddress* addr;
+    struct BMObject* pubkeyObject;
 
 	BM_GLOBAL_PEERS = bmPeersCreate();
 
@@ -24,9 +25,13 @@ int main(int argc, char* argv[]) {
 
     BM_GLOBAL_INV = bmInvCreate();
 
+
+    addr = bmAddressGenerateRandom();
+    pubkeyObject = bmObjectCreatePubkey(addr);
+    bmInvInsertNodeWithObject(BM_GLOBAL_INV, pubkeyObject);
+    printf("BM-%s\n", addr->address);
+
     while(1);
 
-    //bmAddressGenerateRandom(address);
-    //printf("BM-%s\n", address);
     return 0;
 }
