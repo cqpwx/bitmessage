@@ -381,7 +381,7 @@ unsigned long long bmUtilsPOW(void* payload, unsigned int payloadLength, unsigne
         return 0;
     }
     //Calculate target
-    target = bmUtilsCalculateTarget(payloadLength, ttl);
+    target = bmUtilsCalculateTarget(payloadLength + 8, ttl);
     //Calculate initialHash
     initialHashLength = bmUtilsCalculateHash(payload, payloadLength, initialHash);
     //Calculate POW
@@ -539,28 +539,30 @@ void generateKey(unsigned short curve,
 
 unsigned long long bmUtilsCalculateTarget(unsigned int length, unsigned int ttl) {
     BN_CTX* ctx;
-    BIGNUM* target;
+    BIGNUM* num_target;
     BIGNUM* num_64;
     BIGNUM* num_temp;
-    unsigned long long temp;
-
-    temp = htobe64(1000 * (length + 8 + 1000 + ((ttl * (length + 8 + 1000)) / (1 << 16))));
+    unsigned long long target;
 
     ctx = BN_CTX_new();
-    target = BN_new();
+    num_target = BN_new();
     num_64 = BN_new();
     num_temp = BN_new();
-    BN_set_word(target, 2);
+    BN_set_word(num_target, 2);
     BN_set_word(num_64, 64);
-    BN_bin2bn((unsigned char*)&temp, sizeof(unsigned long long), num_temp);
-    BN_exp(target, target, num_64, ctx);
-    BN_div(target, NULL, target, num_temp, ctx);
-    BN_bn2bin(target, (unsigned char*)&temp);
+    BN_exp(num_target, num_target, num_64, ctx);
+    BN_set_word(num_temp, length + 1000);
+    BN_mul_word(num_temp, ttl);
+    BN_div_word(num_temp, 1 << 16);
+    BN_add_word(num_temp, length + 1000);
+    BN_mul_word(num_temp, 1000);
+    BN_div(num_target, NULL, num_target, num_temp, ctx);
+    BN_bn2bin(num_target, (unsigned char*)&target);
 
     BN_free(num_64);
     BN_free(num_temp);
-    BN_free(target);
+    BN_free(num_target);
     BN_CTX_free(ctx);
 
-    return be64toh(temp);
+    return be64toh(target);
 }

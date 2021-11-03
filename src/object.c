@@ -22,12 +22,15 @@ struct BMObjectHeader {
 } __attribute__((packed));
 
 /*
-* Description:
-*	payload:payload buffer
-* Return:
-*	1 if ok, or 0
-*/
-int checkNonce(void* payload, uint64_t payloadLength);
+ * Description:
+ *  isProofOfWorkSufficient
+ * Input:
+ *	payload:payload buffer
+ *	payloadLength:payload length
+ * Return:
+ *	1 if ok, or 0
+ */
+int isProofOfWorkSufficient(void* payload, uint64_t payloadLength);
 
 //PUBLIC
 int bmObjectHandle(uint8_t* payload, uint64_t payloadLength) {
@@ -43,7 +46,7 @@ int bmObjectHandle(uint8_t* payload, uint64_t payloadLength) {
 		return 0;
 	}
 	//Check nonce
-	if (checkNonce(payload, payloadLength)) {
+	if (isProofOfWorkSufficient(payload, payloadLength) == 0) {
 		bmLog(__FUNCTION__, "Invalid nonce!");
 		return 0;
 	}
@@ -175,15 +178,15 @@ struct BMObject* bmObjectCreatePubkey(struct BMAddress* address) {
 }
 
 //PIRVATE
-int checkNonce(void* payload, uint64_t payloadLength) {
+int isProofOfWorkSufficient(void* payload, uint64_t payloadLength) {
 	struct BMObjectHeader* header;
 	uint8_t* p;
 	uint64_t expiresTime;
 	uint64_t ttl;
-	uint8_t mdFirst[64] = {0};
+	uint8_t mdFirst[128] = {0};
 	uint32_t mdFirstLength = 0;
 	uint8_t tempBuffer[128] = {0};
-	uint8_t mdSecond[64] = {0};
+	uint8_t mdSecond[128] = {0};
 	uint64_t pow;
 	uint64_t target;
 
@@ -197,9 +200,9 @@ int checkNonce(void* payload, uint64_t payloadLength) {
 	}
 	//Calclulate the POW
     mdFirstLength = bmUtilsCalculateHash(p + 8, payloadLength - 8, mdFirst);
-	memcpy(tempBuffer, payload, 8);
+	memcpy(tempBuffer, p, 8);
 	memcpy(tempBuffer + 8, mdFirst, mdFirstLength);
-    bmUtilsCalculateHash(tempBuffer, mdFirstLength + 8, mdSecond);
+    bmUtilsCalculateDoubleHash(tempBuffer, mdFirstLength + 8, mdSecond);
 	pow = be64toh(*(uint64_t*)mdSecond);
 	//Compare
     target = bmUtilsCalculateTarget(payloadLength, ttl);
